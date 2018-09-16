@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# Tool to check status of ZFS pools and gmirror devices in FreeBSD.
+#
+# Author: Peter Pakos <peter.pakos@wandisco.com>
+#
+# Copyright (C) 2018 WANdisco
+
+set -euo pipefail
+
+host=$(hostname -f)
+mail_to="root"
+mail_subject_fault="File System DEGRADED on ${host}"
+mail_subject_recovery="File System RECOVERED on ${host}"
+status_file="/var/db/fs.fault"
+
+fault_reported() {
+  if [[ -f "$status_file" ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+set_fault() {
+  touch $status_file
+}
+
+clear_fault() {
+  rm -f $status_file
+}
+
+main() {
+  fault=0
+
+  pool_status=$(zpool status -x)
+
+  if [[ $pool_status != "all pools are healthy" ]]; then
+    fault=1
+  fi
+
+  if gmirror status | grep -q "DEGRADED"; then
+    fault=1
+  fi
+
+  if [[ $fault -eq 1 ]]; then
+    if ! fault_reported; then
+      printf "%s\\n%s\\n" "$(zpool status)" "$(gmirror status)" | mail -s "$mail_subject_fault" $mail_to
+      set_fault
+    fi
+  else
+    if fault_reported; then
+      printf "%s\\n%s\\n" "$(zpool status)" "$(gmirror status)" | mail -s "$mail_subject_recovery" $mail_to
+      clear_fault
+    fi
+  fi
+}
+
+main "$@"
+
