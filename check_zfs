@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Tool to check status of ZFS pools and gmirror devices in FreeBSD.
+# Tool to check status of ZFS pools in FreeBSD.
 #
 # Author: Peter Pakos <peter.pakos@wandisco.com>
 #
@@ -8,11 +8,13 @@
 
 set -euo pipefail
 
+VERSION="1.0.1"
+
 host=$(hostname -f)
 mail_to="root"
-mail_subject_fault="File System DEGRADED on ${host}"
-mail_subject_recovery="File System RECOVERED on ${host}"
-status_file="/var/db/fs.fault"
+mail_subject_fault="ZFS pool DEGRADED on ${host}"
+mail_subject_recovery="ZFS pool RECOVERED on ${host}"
+status_file="/tmp/zfs.fault"
 
 fault_reported() {
   if [[ -f "$status_file" ]]; then
@@ -23,11 +25,11 @@ fault_reported() {
 }
 
 set_fault() {
-  touch $status_file
+  touch "$status_file"
 }
 
 clear_fault() {
-  rm -f $status_file
+  rm -f "$status_file"
 }
 
 main() {
@@ -39,18 +41,14 @@ main() {
     fault=1
   fi
 
-  if gmirror status | grep -q "DEGRADED"; then
-    fault=1
-  fi
-
   if [[ $fault -eq 1 ]]; then
     if ! fault_reported; then
-      printf "%s\\n%s\\n" "$(zpool status)" "$(gmirror status)" | mail -s "$mail_subject_fault" $mail_to
+      printf "%s\\n" "$(zpool status)" | mail -s "$mail_subject_fault" $mail_to
       set_fault
     fi
   else
     if fault_reported; then
-      printf "%s\\n%s\\n" "$(zpool status)" "$(gmirror status)" | mail -s "$mail_subject_recovery" $mail_to
+      printf "%s\\n" "$(zpool status)" | mail -s "$mail_subject_recovery" $mail_to
       clear_fault
     fi
   fi
